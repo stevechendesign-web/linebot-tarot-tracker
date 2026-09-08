@@ -1,10 +1,13 @@
+import json
 import logging
 import os
 import re
+import threading
 from datetime import datetime
 from dotenv import load_dotenv
 from flask import Flask, abort, jsonify, request
 import google.generativeai as genai
+import requests
 from linebot.v3.webhook import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.messaging import (
@@ -31,6 +34,10 @@ LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET", "")
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+MAKE_WEBHOOK_URL = os.getenv(
+    "MAKE_WEBHOOK_URL",
+    "https://hook.us2.make.com/lea7buy6ose2xc3g87h1tsz68l4f7wh7",
+)
 
 # Setup LINE Bot SDK v3 configuration and handler
 configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
@@ -64,8 +71,11 @@ You are an intelligent dual-purpose LINE Bot assistant specializing in two disti
   • 項目：[Extracted item/description]
   • 金額：$[Extracted amount]
   • 類別：[Inferred category e.g., 飲食 / 交通 / 娛樂 / 購物 / 居住 / 醫療]
-  • 狀態：已成功記錄
+  • 狀態：已成功記錄（已同步至雲端試算表）
   💡 財務筆記：[A short 1-sentence supportive budget tip]
+
+  CRITICAL: At the very end of your response, append this hidden machine-readable tag with the extracted values:
+  <!--EXPENSE_DATA:{"item": "[Extracted item]", "amount": [Extracted amount as number], "category": "[Inferred category]"}-->
 
 [ROLE 3: GENERAL / FALLBACK]
 - Trigger: Any message that is not Tarot or finance tracking.
@@ -76,11 +86,38 @@ You are an intelligent dual-purpose LINE Bot assistant specializing in two disti
 """
 
 
-def generate_bot_response(user_text: str) -> str:
-    """Generate response based on user input intent via Google Gemini API."""
+def send_expense_to_make(payload: dict):
+    """Asynchronously forward parsed expense to Make.com webhook."""
+    if not MAKE_WEBHOOK_URL:
+        logger.warning("MAKE_WEBHOOK_URL is not configured; skipping sync.")
+        return
+
+    try:
+        logger.info(f"Syncing expense to Make.com: {payload}")
+        response = requests.post(MAKE_WEBHOOK_URL, json=payload, timeout=5)
+        logger.info(f"Make.com response [{response.status_code}]: {response.text[:100]}")
+    except Exception as e:
+        logger.error(f"Failed to post expense to Make.com: {e}")
+
+
+def dispatch_make_webhook(item: str, amount: float, category: str, raw_text: str, user_id: str):
+    """Helper to dispatch expense payload to Make.com in a separate background thread."""
+    payload = {
+        "userId": user_id or "anonymous",
+        "item": item,
+        "amount": amount,
+        "category": category,
+        "rawText": raw_text,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+    threading.Thread(target=send_expense_to_make, args=(payload,), daemon=True).start()
+
+
+def generate_bot_response(user_text: str, user_id: str = "") -> str:
+    """Generate response based on user input intent via Google Gemini API and sync expenses."""
     if not GEMINI_API_KEY:
         # Fallback if API key is not configured
-        return handle_offline_fallback(user_text)
+        return handle_offline_fallback(user_text, user_id)
 
     try:
         model = genai.GenerativeModel(
@@ -93,28 +130,51 @@ def generate_bot_response(user_text: str) -> str:
         )
         response = model.generate_content(user_text)
         if response and response.text:
-            return response.text.strip()
+            text = response.text.strip()
+
+            # Check if Gemini extracted expense data
+            match = re.search(r"<!--EXPENSE_DATA:(.*?)-->", text, re.DOTALL)
+            if match:
+                try:
+                    data = json.loads(match.group(1).strip())
+                    item = data.get("item", "未指定項目")
+                    amount = float(data.get("amount", 0))
+                    category = data.get("category", "日常支出")
+                    dispatch_make_webhook(item, amount, category, user_text, user_id)
+                except Exception as ex:
+                    logger.error(f"Failed to parse EXPENSE_DATA from Gemini: {ex}")
+
+                # Clean the hidden tag before sending to LINE user
+                text = re.sub(r"<!--EXPENSE_DATA:(.*?)-->", "", text).strip()
+
+            return text
+
         return "🔮 星象迷霧籠罩，請稍後再試一次..."
     except Exception as e:
         logger.error(f"Error calling Gemini API: {e}", exc_info=True)
-        return handle_offline_fallback(user_text)
+        return handle_offline_fallback(user_text, user_id)
 
 
-def handle_offline_fallback(user_text: str) -> str:
+def handle_offline_fallback(user_text: str, user_id: str = "") -> str:
     """Deterministic fallback in case Gemini API is unavailable or unconfigured."""
     cleaned = user_text.strip()
 
     # Fast pattern match for finance/expense: e.g. "Lunch 120" or "午餐 120"
     match = re.search(r"^(.*?)\s*[$￥]?\s*(\d+(?:\.\d+)?)\s*$", cleaned)
     if match:
-        item = match.group(1).strip() or "未指定項目"
-        amount = match.group(2).strip()
+        item = match.group(1).strip() or "日常花費"
+        amount = float(match.group(2).strip())
+        category = "飲食" if any(k in item for k in ["餐", "吃", "飯", "麵", "茶", "咖", "酒", "肉"]) else "日常支出"
+
+        # Dispatch to Make.com
+        dispatch_make_webhook(item, amount, category, user_text, user_id)
+
         return (
             f"📝【記帳確認】\n"
             f"• 項目：{item}\n"
-            f"• 金額：${amount}\n"
-            f"• 類別：日常支出\n"
-            f"• 狀態：已成功記錄\n\n"
+            f"• 金額：${amount:g}\n"
+            f"• 類別：{category}\n"
+            f"• 狀態：已成功記錄（已同步至雲端試算表）\n\n"
             f"💡 每一筆紀錄，都是通往財富自由的一小步！"
         )
 
@@ -143,6 +203,7 @@ def index():
         {
             "status": "healthy",
             "service": "LINE Bot (Tarot & Expense Tracker)",
+            "makeWebhookConfigured": bool(MAKE_WEBHOOK_URL),
             "timestamp": datetime.utcnow().isoformat(),
         }
     ), 200
@@ -175,10 +236,11 @@ def callback():
 def handle_text_message(event: MessageEvent):
     """Handle incoming text messages from LINE users."""
     user_text = event.message.text
-    logger.info(f"Processing message from {event.source.user_id}: {user_text}")
+    user_id = getattr(event.source, "user_id", "")
+    logger.info(f"Processing message from {user_id}: {user_text}")
 
     # Generate response based on intent (Tarot master vs Finance tracker)
-    reply_text = generate_bot_response(user_text)
+    reply_text = generate_bot_response(user_text, user_id=user_id)
 
     # Send reply using LINE Messaging API Client
     try:

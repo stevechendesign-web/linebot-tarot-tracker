@@ -51,6 +51,7 @@ Under the **Environment** tab in your Render service, add:
 | `LINE_CHANNEL_SECRET` | From LINE Developers Console | `7a8b...` |
 | `LINE_CHANNEL_ACCESS_TOKEN` | Long-lived token from LINE Developers Console | `vWxyz...` |
 | `GEMINI_API_KEY` | From Google AI Studio | `AIzaSy...` |
+| `MAKE_WEBHOOK_URL` | *(Optional)* Make.com Webhook URL for expense sync | `https://hook.us2.make.com/...` |
 | `GEMINI_MODEL` | *(Optional)* Default is `gemini-1.5-flash` | `gemini-1.5-flash` |
 
 ### 4. Configure Webhook on LINE Developers Console
