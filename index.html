@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aura Digital Clock & Pomodoro</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,500;0,700;1,300&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-base: #08090d;
+      --card-bg: rgba(18, 21, 31, 0.7);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --card-highlight: rgba(255, 255, 255, 0.12);
+      --text-primary: #f0f4fc;
+      --text-secondary: #8a99b5;
+      --text-dim: #4d5b75;
+      
+      /* Theme Accents (Default: Cyan) */
+      --accent-primary: #00f2fe;
+      --accent-glow: rgba(0, 242, 254, 0.55);
+      --accent-glow-intense: rgba(0, 242, 254, 0.9);
+      --accent-glow-soft: rgba(0, 242, 254, 0.25);
+      --accent-secondary: #4facfe;
+      --progress-gradient: linear-gradient(90deg, #4facfe, #00f2fe);
+    }
+
+    [data-theme="violet"] {
+      --accent-primary: #b388ff;
+      --accent-glow: rgba(179, 136, 255, 0.6);
+      --accent-glow-intense: rgba(179, 136, 255, 0.95);
+      --accent-glow-soft: rgba(179, 136, 255, 0.28);
+      --accent-secondary: #7c4dff;
+      --progress-gradient: linear-gradient(90deg, #7c4dff, #b388ff);
+    }
+
+    [data-theme="emerald"] {
+      --accent-primary: #00f5a0;
+      --accent-glow: rgba(0, 245, 160, 0.55);
+      --accent-glow-intense: rgba(0, 245, 160, 0.9);
+      --accent-glow-soft: rgba(0, 245, 160, 0.25);
+      --accent-secondary: #00d9f5;
+      --progress-gradient: linear-gradient(90deg, #00d9f5, #00f5a0);
+    }
+
+    [data-theme="amber"] {
+      --accent-primary: #ffb300;
+      --accent-glow: rgba(255, 179, 0, 0.55);
+      --accent-glow-intense: rgba(255, 179, 0, 0.9);
+      --accent-glow-soft: rgba(255, 179, 0, 0.25);
+      --accent-secondary: #ff7043;
+      --progress-gradient: linear-gradient(90deg, #ff7043, #ffb300);
+    }
+
+    [data-theme="rose"] {
+      --accent-primary: #ff4081;
+      --accent-glow: rgba(255, 64, 129, 0.6);
+      --accent-glow-intense: rgba(255, 64, 129, 0.95);
+      --accent-glow-soft: rgba(255, 64, 129, 0.28);
+      --accent-secondary: #f50057;
+      --progress-gradient: linear-gradient(90deg, #f50057, #ff4081);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    body {
+      min-height: 100vh;
+      background-color: var(--bg-base);
+      color: var(--text-primary);
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow-x: hidden;
+      overflow-y: auto;
+      padding: 40px 16px;
+      position: relative;
+    }
+
+    /* Ambient background gradient meshes */
+    .ambient-glow {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(140px);
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.45;
+      transition: background 0.8s ease;
+    }
+
+    .ambient-glow-1 {
+      width: 520px;
+      height: 520px;
+      background: radial-gradient(circle, var(--accent-primary) 0%, transparent 70%);
+      top: 10%;
+      left: 15%;
+      animation: drift 16s infinite alternate ease-in-out;
+    }
+
+    .ambient-glow-2 {
+      width: 560px;
+      height: 560px;
+      background: radial-gradient(circle, var(--accent-secondary) 0%, transparent 70%);
+      bottom: 10%;
+      right: 15%;
+      animation: drift 20s infinite alternate-reverse ease-in-out;
+    }
+
+    @keyframes drift {
+      0% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(40px, -30px) scale(1.1); }
+      100% { transform: translate(-30px, 40px) scale(0.95); }
+    }
+
+    .dashboard-container {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 28px;
+      width: 100%;
+      max-width: 1060px;
+    }
+
+    /* Clock Card */
+    .clock-card {
+      width: 100%;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-top: 1px solid var(--card-highlight);
+      backdrop-filter: blur(28px) saturate(180%);
+      -webkit-backdrop-filter: blur(28px) saturate(180%);
+      border-radius: 28px;
+      padding: 44px 48px;
+      box-shadow:
+        0 25px 60px rgba(0, 0, 0, 0.55),
+        0 0 50px var(--accent-glow),
+        0 0 100px var(--accent-glow-soft);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 28px;
+      transition: box-shadow 0.5s ease, border-color 0.5s ease;
+    }
+
+    /* Header with Date and Weekday */
+    .clock-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      gap: 16px;
+    }
+
+    .day-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent-primary);
+      transition: color 0.4s ease;
+    }
+
+    .pulse-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent-primary);
+      box-shadow: 0 0 10px var(--accent-primary);
+      animation: pulse 2s infinite ease-in-out;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; transform: scale(0.9); }
+      50% { opacity: 1; transform: scale(1.3); }
+    }
+
+    .date-display {
+      font-size: 0.95rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      letter-spacing: 0.03em;
+    }
+
+    /* Time Display Section */
+    .time-wrapper {
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-variant-numeric: tabular-nums;
+      position: relative;
+      padding: 12px 0;
+    }
+
+    .digits-group {
+      display: flex;
+      align-items: center;
+      font-size: clamp(6.8rem, 15vw, 13.6rem);
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: -0.02em;
+      color: #ffffff;
+      text-shadow:
+        0 0 14px var(--accent-glow-intense),
+        0 0 28px var(--accent-primary),
+        0 0 55px var(--accent-glow),
+        0 0 95px var(--accent-glow),
+        0 0 150px var(--accent-glow-soft),
+        0 4px 32px rgba(0, 0, 0, 0.9);
+      filter: drop-shadow(0 0 30px var(--accent-glow));
+      transition: text-shadow 0.4s ease, filter 0.4s ease;
+    }
+
+    .digit-box {
+      display: inline-flex;
+      justify-content: center;
+      min-width: 0.65em;
+    }
+
+    .colon {
+      display: inline-block;
+      color: var(--accent-primary);
+      opacity: 1;
+      margin: 0 0.08em;
+      font-weight: 300;
+      text-shadow:
+        0 0 15px var(--accent-primary),
+        0 0 32px var(--accent-primary),
+        0 0 65px var(--accent-glow-intense),
+        0 0 110px var(--accent-glow);
+      filter: drop-shadow(0 0 18px var(--accent-glow));
+      transition: color 0.4s ease, text-shadow 0.4s ease, filter 0.4s ease;
+      animation: blink 1s infinite ease-in-out;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; filter: brightness(1.2); }
+      50% { opacity: 0.2; filter: brightness(0.6); }
+    }
+
+    .seconds-group {
+      font-size: clamp(3.2rem, 6.5vw, 5.8rem);
+      font-weight: 500;
+      color: var(--accent-primary);
+      margin-left: 14px;
+      display: flex;
+      align-items: baseline;
+      text-shadow:
+        0 0 14px var(--accent-primary),
+        0 0 30px var(--accent-primary),
+        0 0 60px var(--accent-glow-intense),
+        0 0 95px var(--accent-glow);
+      filter: drop-shadow(0 0 18px var(--accent-glow));
+      transition: color 0.4s ease, text-shadow 0.4s ease, filter 0.4s ease;
+    }
+
+    .period-group {
+      display: flex;
+      flex-direction: column;
+      margin-left: 18px;
+      font-size: clamp(1.5rem, 3.2vw, 2.1rem);
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      line-height: 1.1;
+      color: var(--text-dim);
+    }
+
+    .period-group .active {
+      color: #ffffff;
+      text-shadow:
+        0 0 12px var(--accent-primary),
+        0 0 25px var(--accent-glow-intense),
+        0 0 50px var(--accent-glow);
+    }
+
+    /* Seconds Progress Bar */
+    .progress-container {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--progress-gradient);
+      border-radius: 999px;
+      box-shadow: 0 0 12px var(--accent-glow);
+      transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Footer & Controls */
+    .clock-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .format-toggle {
+      display: inline-flex;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 3px;
+    }
+
+    .toggle-btn {
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 9px;
+      cursor: pointer;
+      transition: all 0.25s ease;
+    }
+
+    .toggle-btn.active {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-primary);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .theme-picker {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .theme-swatch {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .theme-swatch:hover {
+      transform: scale(1.15);
+    }
+
+    .theme-swatch.active {
+      border-color: #fff;
+      box-shadow: 0 0 10px currentColor;
+    }
+
+    .swatch-cyan { background: #00f2fe; color: #00f2fe; }
+    .swatch-violet { background: #b388ff; color: #b388ff; }
+    .swatch-emerald { background: #00f5a0; color: #00f5a0; }
+    .swatch-amber { background: #ffb300; color: #ffb300; }
+    .swatch-rose { background: #ff4081; color: #ff4081; }
+
+    .timezone-label {
+      font-size: 0.78rem;
+      color: var(--text-dim);
+      font-weight: 500;
+      letter-spacing: 0.04em;
+    }
+
+    /* =========================================
+       POMODORO TIMER SECTION
+       ========================================= */
+    .pomodoro-card {
+      width: 100%;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-top: 1px solid var(--card-highlight);
+      backdrop-filter: blur(28px) saturate(180%);
+      -webkit-backdrop-filter: blur(28px) saturate(180%);
+      border-radius: 28px;
+      padding: 34px 46px;
+      box-shadow:
+        0 20px 50px rgba(0, 0, 0, 0.5),
+        0 0 30px var(--accent-glow);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 24px;
+      transition: box-shadow 0.5s ease, border-color 0.5s ease;
+      position: relative;
+    }
+
+    .pomo-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .pomo-title-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent-primary);
+    }
+
+    /* Mode Selection Tabs */
+    .pomo-modes {
+      display: inline-flex;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 3px;
+      gap: 2px;
+    }
+
+    .mode-tab {
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 11px;
+      cursor: pointer;
+      transition: all 0.25s ease;
+    }
+
+    .mode-tab:hover {
+      color: var(--text-primary);
+    }
+
+    .mode-tab.active {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-primary);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    /* Big Pomodoro Display */
+    .pomo-display {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-variant-numeric: tabular-nums;
+      font-size: clamp(3.6rem, 10vw, 5.8rem);
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: -0.01em;
+      color: var(--text-primary);
+      text-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+    }
+
+    .pomo-colon {
+      color: var(--accent-primary);
+      margin: 0 0.06em;
+      font-weight: 300;
+      text-shadow: 0 0 16px var(--accent-glow);
+      transition: color 0.4s ease;
+    }
+
+    .pomo-status-label {
+      font-size: 0.76rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-top: -8px;
+    }
+
+    /* Pomodoro Progress Bar */
+    .pomo-progress-container {
+      width: 100%;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .pomo-progress-bar {
+      height: 100%;
+      width: 100%;
+      background: var(--progress-gradient);
+      border-radius: 999px;
+      box-shadow: 0 0 14px var(--accent-glow);
+      transition: width 0.5s ease;
+    }
+
+    /* Pomodoro Action Buttons */
+    .pomo-actions {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      width: 100%;
+      padding-top: 6px;
+    }
+
+    .btn-action {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 0.92rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      padding: 12px 30px;
+      border-radius: 14px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      outline: none;
+    }
+
+    /* Start Button - Glowing Gradient */
+    .btn-start {
+      background: var(--progress-gradient);
+      color: #06080d;
+      border: none;
+      box-shadow: 0 4px 18px var(--accent-glow);
+    }
+
+    .btn-start:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 26px var(--accent-glow);
+      filter: brightness(1.08);
+    }
+
+    .btn-start:active {
+      transform: translateY(0);
+    }
+
+    .btn-start:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    /* Pause Button - Ghost Neon */
+    .btn-pause {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text-primary);
+      backdrop-filter: blur(10px);
+    }
+
+    .btn-pause:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.09);
+      border-color: var(--accent-primary);
+      color: var(--accent-primary);
+      box-shadow: 0 0 16px var(--accent-glow);
+      transform: translateY(-2px);
+    }
+
+    .btn-pause:active {
+      transform: translateY(0);
+    }
+
+    .btn-pause:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Reset Button - Clean Minimal Outline */
+    .btn-reset {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--text-secondary);
+    }
+
+    .btn-reset:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.2);
+      color: var(--text-primary);
+      transform: translateY(-2px);
+    }
+
+    .btn-reset:active {
+      transform: translateY(0);
+    }
+
+    @media (max-width: 600px) {
+      .clock-card, .pomodoro-card {
+        padding: 26px 18px;
+        gap: 20px;
+        border-radius: 22px;
+      }
+      .digits-group {
+        font-size: clamp(4.2rem, 16vw, 6.2rem);
+      }
+      .seconds-group {
+        font-size: clamp(2rem, 7.5vw, 2.9rem);
+        margin-left: 8px;
+      }
+      .period-group {
+        font-size: clamp(1rem, 3.5vw, 1.3rem);
+        margin-left: 8px;
+      }
+      .clock-controls, .pomo-header {
+        justify-content: center;
+      }
+      .pomo-actions {
+        gap: 10px;
+      }
+      .btn-action {
+        padding: 10px 18px;
+        font-size: 0.85rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Ambient background lighting -->
+  <div class="ambient-glow ambient-glow-1"></div>
+  <div class="ambient-glow ambient-glow-2"></div>
+
+  <div class="dashboard-container">
+    <!-- CLOCK SECTION -->
+    <main class="clock-card" role="region" aria-label="Digital Clock">
+      <!-- Header: Weekday & Date -->
+      <header class="clock-header">
+        <div class="day-badge">
+          <span class="pulse-dot"></span>
+          <span id="weekday">SATURDAY</span>
+        </div>
+        <div class="date-display" id="full-date">SEPTEMBER 5, 2026</div>
+      </header>
+
+      <!-- Main Time Display -->
+      <div class="time-wrapper">
+        <div class="digits-group">
+          <span class="digit-box" id="hours">00</span>
+          <span class="colon">:</span>
+          <span class="digit-box" id="minutes">00</span>
+        </div>
+
+        <div class="seconds-group">
+          <span class="colon">:</span>
+          <span class="digit-box" id="seconds">00</span>
+        </div>
+
+        <div class="period-group" id="period-container">
+          <span id="period-am">AM</span>
+          <span id="period-pm">PM</span>
+        </div>
+      </div>
+
+      <!-- Seconds Progress Indicator -->
+      <div class="progress-container" title="Current minute elapsed seconds">
+        <div class="progress-bar" id="seconds-progress"></div>
+      </div>
+
+      <!-- Footer Controls -->
+      <footer class="clock-controls">
+        <!-- 12h / 24h Toggle -->
+        <div class="format-toggle" role="radiogroup" aria-label="Time Format">
+          <button class="toggle-btn active" id="btn-12h" role="radio" aria-checked="true">12H</button>
+          <button class="toggle-btn" id="btn-24h" role="radio" aria-checked="false">24H</button>
+        </div>
+
+        <!-- Accent Color Picker -->
+        <div class="theme-picker" aria-label="Theme Color">
+          <button class="theme-swatch swatch-cyan active" data-theme-name="cyan" title="Cyan Neon" aria-label="Cyan theme"></button>
+          <button class="theme-swatch swatch-violet" data-theme-name="violet" title="Cyber Violet" aria-label="Violet theme"></button>
+          <button class="theme-swatch swatch-emerald" data-theme-name="emerald" title="Emerald Matrix" aria-label="Emerald theme"></button>
+          <button class="theme-swatch swatch-amber" data-theme-name="amber" title="Solar Amber" aria-label="Amber theme"></button>
+          <button class="theme-swatch swatch-rose" data-theme-name="rose" title="Neon Rose" aria-label="Rose theme"></button>
+        </div>
+
+        <!-- Timezone Badge -->
+        <div class="timezone-label" id="timezone">UTC</div>
+      </footer>
+    </main>
+
+    <!-- POMODORO TIMER SECTION -->
+    <section class="pomodoro-card" role="region" aria-label="Pomodoro Timer">
+      <header class="pomo-header">
+        <div class="pomo-title-badge">
+          <span class="pulse-dot"></span>
+          <span>POMODORO FOCUS</span>
+        </div>
+
+        <div class="pomo-modes" role="tablist" aria-label="Pomodoro Intervals">
+          <button class="mode-tab active" data-duration="1500" role="tab" aria-selected="true">Focus (25m)</button>
+          <button class="mode-tab" data-duration="300" role="tab" aria-selected="false">Short Break (5m)</button>
+          <button class="mode-tab" data-duration="900" role="tab" aria-selected="false">Long Break (15m)</button>
+        </div>
+      </header>
+
+      <!-- Pomodoro Time Countdown -->
+      <div class="pomo-display">
+        <span id="pomo-mins">25</span>
+        <span class="pomo-colon">:</span>
+        <span id="pomo-secs">00</span>
+      </div>
+      <div class="pomo-status-label" id="pomo-status">Ready to Focus</div>
+
+      <!-- Pomodoro Progress Bar -->
+      <div class="pomo-progress-container" title="Session progress">
+        <div class="pomo-progress-bar" id="pomo-progress"></div>
+      </div>
+
+      <!-- Actions: Start, Pause, Reset -->
+      <div class="pomo-actions">
+        <button class="btn-action btn-start" id="btn-pomo-start">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          </svg>
+          Start
+        </button>
+
+        <button class="btn-action btn-pause" id="btn-pomo-pause" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="6" y="4" width="4" height="16"></rect>
+            <rect x="14" y="4" width="4" height="16"></rect>
+          </svg>
+          Pause
+        </button>
+
+        <button class="btn-action btn-reset" id="btn-pomo-reset">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+            <path d="M3 3v5h5"></path>
+          </svg>
+          Reset
+        </button>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    (function () {
+      /* =========================================
+         1. DIGITAL CLOCK ENGINE
+         ========================================= */
+      let is24Hour = localStorage.getItem('aura_clock_24h') === 'true';
+      let currentTheme = localStorage.getItem('aura_clock_theme') || 'cyan';
+
+      const hoursEl = document.getElementById('hours');
+      const minutesEl = document.getElementById('minutes');
+      const secondsEl = document.getElementById('seconds');
+      const weekdayEl = document.getElementById('weekday');
+      const fullDateEl = document.getElementById('full-date');
+      const periodContainer = document.getElementById('period-container');
+      const periodAmEl = document.getElementById('period-am');
+      const periodPmEl = document.getElementById('period-pm');
+      const progressBarEl = document.getElementById('seconds-progress');
+      const timezoneEl = document.getElementById('timezone');
+
+      const btn12h = document.getElementById('btn-12h');
+      const btn24h = document.getElementById('btn-24h');
+      const themeSwatches = document.querySelectorAll('.theme-swatch');
+
+      try {
+        const tzName = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        timezoneEl.textContent = tzName || 'LOCAL';
+      } catch (e) {
+        timezoneEl.textContent = 'LOCAL';
+      }
+
+      const padZero = (n) => String(n).padStart(2, '0');
+
+      function updateClock() {
+        const now = new Date();
+        const rawHours = now.getHours();
+        const minutes = now.getMinutes();
+        const seconds = now.getSeconds();
+        const milliseconds = now.getMilliseconds();
+
+        let displayHours = rawHours;
+        const isPM = rawHours >= 12;
+
+        if (!is24Hour) {
+          displayHours = rawHours % 12 || 12;
+          periodContainer.style.display = 'flex';
+          if (isPM) {
+            periodAmEl.classList.remove('active');
+            periodPmEl.classList.add('active');
+          } else {
+            periodAmEl.classList.add('active');
+            periodPmEl.classList.remove('active');
+          }
+        } else {
+          periodContainer.style.display = 'none';
+        }
+
+        hoursEl.textContent = padZero(displayHours);
+        minutesEl.textContent = padZero(minutes);
+        secondsEl.textContent = padZero(seconds);
+
+        const progressPercent = ((seconds + milliseconds / 1000) / 60) * 100;
+        progressBarEl.style.width = `${progressPercent.toFixed(2)}%`;
+
+        const weekdays = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+        const months = [
+          'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
+          'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'
+        ];
+
+        weekdayEl.textContent = weekdays[now.getDay()];
+        fullDateEl.textContent = `${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
+      }
+
+      function renderClockLoop() {
+        updateClock();
+        requestAnimationFrame(renderClockLoop);
+      }
+
+      function setTimeFormat(mode24) {
+        is24Hour = mode24;
+        localStorage.setItem('aura_clock_24h', String(is24Hour));
+
+        if (is24Hour) {
+          btn24h.classList.add('active');
+          btn24h.setAttribute('aria-checked', 'true');
+          btn12h.classList.remove('active');
+          btn12h.setAttribute('aria-checked', 'false');
+        } else {
+          btn12h.classList.add('active');
+          btn12h.setAttribute('aria-checked', 'true');
+          btn24h.classList.remove('active');
+          btn24h.setAttribute('aria-checked', 'false');
+        }
+        updateClock();
+      }
+
+      btn12h.addEventListener('click', () => setTimeFormat(false));
+      btn24h.addEventListener('click', () => setTimeFormat(true));
+
+      function applyTheme(themeName) {
+        currentTheme = themeName;
+        localStorage.setItem('aura_clock_theme', themeName);
+
+        if (themeName === 'cyan') {
+          document.documentElement.removeAttribute('data-theme');
+        } else {
+          document.documentElement.setAttribute('data-theme', themeName);
+        }
+
+        themeSwatches.forEach(swatch => {
+          if (swatch.dataset.themeName === themeName) {
+            swatch.classList.add('active');
+          } else {
+            swatch.classList.remove('active');
+          }
+        });
+      }
+
+      themeSwatches.forEach(swatch => {
+        swatch.addEventListener('click', () => {
+          applyTheme(swatch.dataset.themeName);
+        });
+      });
+
+      /* =========================================
+         2. POMODORO TIMER ENGINE
+         ========================================= */
+      let totalDuration = 1500; // 25 minutes default
+      let remainingSeconds = 1500;
+      let timerInterval = null;
+      let isRunning = false;
+
+      const pomoMinsEl = document.getElementById('pomo-mins');
+      const pomoSecsEl = document.getElementById('pomo-secs');
+      const pomoStatusEl = document.getElementById('pomo-status');
+      const pomoProgressEl = document.getElementById('pomo-progress');
+      const btnPomoStart = document.getElementById('btn-pomo-start');
+      const btnPomoPause = document.getElementById('btn-pomo-pause');
+      const btnPomoReset = document.getElementById('btn-pomo-reset');
+      const modeTabs = document.querySelectorAll('.mode-tab');
+
+      // Audio notification using Web Audio API (no external file dependencies)
+      function playChime() {
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+          osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.25); // A5
+
+          gain.gain.setValueAtTime(0.3, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+
+          osc.start();
+          osc.stop(ctx.currentTime + 1.2);
+        } catch (e) {
+          console.warn('Audio chime could not play:', e);
+        }
+      }
+
+      function updatePomoDisplay() {
+        const mins = Math.floor(remainingSeconds / 60);
+        const secs = remainingSeconds % 60;
+        pomoMinsEl.textContent = padZero(mins);
+        pomoSecsEl.textContent = padZero(secs);
+
+        const progressPercent = (remainingSeconds / totalDuration) * 100;
+        pomoProgressEl.style.width = `${progressPercent.toFixed(2)}%`;
+
+        if (isRunning) {
+          document.title = `(${padZero(mins)}:${padZero(secs)}) Aura Pomodoro`;
+        }
+      }
+
+      function startPomodoro() {
+        if (isRunning) return;
+        isRunning = true;
+
+        btnPomoStart.disabled = true;
+        btnPomoPause.disabled = false;
+        pomoStatusEl.textContent = 'Focus in progress...';
+        pomoStatusEl.style.color = 'var(--accent-primary)';
+
+        timerInterval = setInterval(() => {
+          if (remainingSeconds > 0) {
+            remainingSeconds--;
+            updatePomoDisplay();
+          } else {
+            clearInterval(timerInterval);
+            isRunning = false;
+            btnPomoStart.disabled = false;
+            btnPomoPause.disabled = true;
+            pomoStatusEl.textContent = 'Session Complete! Take a rest 🎉';
+            pomoStatusEl.style.color = 'var(--text-primary)';
+            document.title = '🎉 Pomodoro Complete!';
+            playChime();
+          }
+        }, 1000);
+      }
+
+      function pausePomodoro() {
+        if (!isRunning) return;
+        clearInterval(timerInterval);
+        isRunning = false;
+
+        btnPomoStart.disabled = false;
+        btnPomoPause.disabled = true;
+        pomoStatusEl.textContent = 'Session Paused';
+        pomoStatusEl.style.color = 'var(--text-secondary)';
+        document.title = 'Aura Digital Clock & Pomodoro';
+      }
+
+      function resetPomodoro() {
+        clearInterval(timerInterval);
+        isRunning = false;
+        remainingSeconds = totalDuration;
+
+        btnPomoStart.disabled = false;
+        btnPomoPause.disabled = true;
+        pomoStatusEl.textContent = 'Ready to Focus';
+        pomoStatusEl.style.color = 'var(--text-dim)';
+        document.title = 'Aura Digital Clock & Pomodoro';
+
+        updatePomoDisplay();
+      }
+
+      btnPomoStart.addEventListener('click', startPomodoro);
+      btnPomoPause.addEventListener('click', pausePomodoro);
+      btnPomoReset.addEventListener('click', resetPomodoro);
+
+      // Mode switching (Focus 25m, Short Break 5m, Long Break 15m)
+      modeTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          modeTabs.forEach(t => {
+            t.classList.remove('active');
+            t.setAttribute('aria-selected', 'false');
+          });
+          tab.classList.add('active');
+          tab.setAttribute('aria-selected', 'true');
+
+          totalDuration = parseInt(tab.dataset.duration, 10);
+          resetPomodoro();
+        });
+      });
+
+      // Initialize
+      setTimeFormat(is24Hour);
+      applyTheme(currentTheme);
+      renderClockLoop();
+      updatePomoDisplay();
+    })();
+  </script>
+</body>
+</html>
