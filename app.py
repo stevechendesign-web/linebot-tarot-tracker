@@ -30,10 +30,23 @@ def callback():
 def handle_message(event):
     user_msg = event.message.text
     
-    # 這是原本的抽牌關鍵字邏輯
-    if user_msg == "抽牌" or user_msg == "紀錄":
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="抽牌功能目前正常運作中！"))
+        # 這是全新、會隨機洗牌與解牌的邏輯
+    if user_msg == "抽牌":
+        try:
+            response = gemini_client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents="請隨機幫我抽一張塔羅牌，告訴我它是什麼牌、正位還是逆位，並對我今天的運勢進行簡短的塔羅解牌占卜。",
+                config=types.GenerateContentConfig(
+                    system_instruction="你是一位精通塔羅牌與神秘學的專業占卜師。當收到抽牌請求時，你必須隨機從78張塔羅牌中挑選一張，每次都要隨機抽取不同的牌與正逆位，並用溫暖、智慧的繁體中文為使用者解牌。"
+                )
+            )
+            reply_text = response.text
+        except Exception as e:
+            reply_text = "哎呀，我的水晶球現在有點模糊，請稍後再問我一次。"
+            
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
         return
+
         
     # 如果使用者不是輸入特定的指令，就交給 Gemini AI 扮演塔羅占卜師回答
     try:
