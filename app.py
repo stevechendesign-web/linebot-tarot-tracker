@@ -46,12 +46,10 @@ def handle_message(event):
     # -----------------------------------------------------------------
     if user_msg.startswith("提醒我") and "分鐘後" in user_msg:
         try:
-            # 簡易解析格式
             parts = user_msg.split("分鐘後")
             minutes = int(parts[0].replace("提醒我", "").strip())
             reminder_content = parts[1].strip()
             
-            # 設定定時器 (分鐘轉秒數)
             seconds = minutes * 60
             t = threading.Timer(seconds, send_reminder, args=[user_id, reminder_content])
             t.start()
@@ -71,12 +69,11 @@ def handle_message(event):
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"☯️ 您向神明求籤，但擲出【{dice}】。神明目前未應允，請調整心情再試一次。"))
             return
         
-        # 聖筊則賜籤 (六十甲子籤簡易範例)
         fortunes = [
             "第一籤【大吉】甲子：日出東方照大地，萬事亨通福祿臨。求財得財，病體安康。",
             "第十籤【下下】癸酉：病中若得苦心勞，到底完全總未遭。多行善事，以求改運。",
             "第二四籤【中平】丁亥：月出光輝本清吉，浮雲總是蔽其明。耐守時運，自得安泰。",
-            "第三六籤【上籤】己亥：福如東海壽如山，君爾何須嘆苦艱。命內自然逢大吉，茅屋亦可變成官。"
+            "第三六籤 trick【上籤】己亥：福如東海壽如山，君爾何須嘆苦艱。命內自然逢大吉，茅屋亦可變成官。"
         ]
         chosen_fortune = random.choice(fortunes)
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"☯️ 擲出【聖筊】！神明賜籤如下：\n\n{chosen_fortune}"))
@@ -160,7 +157,7 @@ def handle_message(event):
             model='gemini-2.5-flash',
             contents=user_msg,
             config=types.GenerateContentConfig(
-                system_instruction="你是一位專業、有效率的日常生活助手。請用繁體中文回答使用者的問題，不帶多餘的溫柔情感，直接切入核心回答。"
+                system_instruction="你是一位專業、有效率的日常生活助手兼客觀命理分析師。請用繁體中文回答使用者的問題或進行占卜算命，不帶多餘的溫柔情感，直接切入核心回答。"
             )
         )
         reply_text = response.text
