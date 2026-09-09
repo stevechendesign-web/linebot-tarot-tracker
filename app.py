@@ -1,22 +1,30 @@
-import random
-
 import os
+import random
+import threading
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
-# 引入新版 Gemini SDK
 from google import genai
 from google.genai import types
 
 app = Flask(__name__)
 
-# 讀取 LINE 的環境變數
+# LINE 憑證與 Gemini 客戶端初始化
 line_bot_api = LineBotApi(os.environ.get('LINE_CHANNEL_ACCESS_TOKEN'))
 handler = WebhookHandler(os.environ.get('LINE_CHANNEL_SECRET'))
-
-# 初始化 Gemini 客戶端（它會自動去讀 Render 上的 GEMINI_API_KEY）
 gemini_client = genai.Client()
+
+# 記憶體內儲存（注意：Render 免費方案重啟時會清空，僅供簡易操作）
+TODO_LIST = {}  # 格式: {user_id: ["任務1", "任務2"]}
+EXPENSES = {}   # 格式: {user_id: [{"item": "午餐", "amount": 120}]}
+
+# 定時提醒回呼函式
+def send_reminder(user_id, message_text):
+    try:
+        line_bot_api.push_message(user_id, TextSendMessage(text=f"⏰ 【定時提醒】時間到囉！您的提醒事項：{message_text}"))
+    except Exception as e:
+        print(f"發送提醒失敗: {e}")
 
 @app.route("/callback", methods=['POST'])
 def callback():
@@ -30,49 +38,136 @@ def callback():
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    user_msg = event.message.text.strip() # 去除可能不小心打到的空格
+    user_id = event.source.user_id
+    user_msg = event.message.text.strip()
     
-    # 1. 判斷是不是要「抽牌」（包含只要訊息裡有提到抽牌兩個字就觸發）
-    if "抽牌" in user_msg or "占卜" in user_msg:
-        tarot_cards = [
-            "愚者", "魔術師", "女祭司", "女皇", "皇帝", "教皇", "戀人", "戰車", "力量", "隱士", 
-            "命運之輪", "正義", "倒吊人", "死神", "節制", "惡魔", "高塔", "星星", "月亮", "太陽", 
-            "審判", "世界",
-            "權杖一", "權杖二", "權杖三", "權杖四", "權杖五", "權杖六", "權杖七", "權杖八", "權杖九", "權杖十", "權杖侍從", "權杖騎士", "權杖皇后", "權杖國王",
-            "聖杯一", "聖杯二", "聖杯三", "聖杯四", "聖杯五", "聖杯六", "聖杯七", "聖杯八", "聖杯九", "聖杯十", "聖杯侍從", "聖杯騎士", "聖杯皇后", "聖杯國王",
-            "寶劍一", "寶劍二", "寶劍三", "寶劍四", "寶劍五", "寶劍六", "寶劍七", "寶劍八", "寶劍九", "寶劍十", "寶劍侍從", "寶劍騎士", "寶劍皇后", "寶劍國王",
-            "金幣一", "金幣二", "金幣三", "金幣四", "金幣五", "金幣六", "金幣七", "金幣八", "金幣九", "金幣十", "金幣侍從", "金幣騎士", "金幣皇后", "金幣國王"
+    # -----------------------------------------------------------------
+    # 【功能 1】鬧鐘與定時提醒 (格式：提醒我 10 分鐘後 關瓦斯)
+    # -----------------------------------------------------------------
+    if user_msg.startswith("提醒我") and "分鐘後" in user_msg:
+        try:
+            # 簡易解析格式
+            parts = user_msg.split("分鐘後")
+            minutes = int(parts[0].replace("提醒我", "").strip())
+            reminder_content = parts[1].strip()
+            
+            # 設定定時器 (分鐘轉秒數)
+            seconds = minutes * 60
+            t = threading.Timer(seconds, send_reminder, args=[user_id, reminder_content])
+            t.start()
+            
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"✅ 已為您設定提醒：{minutes} 分鐘後通知您「{reminder_content}」。"))
+            return
+        except Exception:
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="❌ 提醒設定失敗。請使用格式：提醒我 5 分鐘後 收衣服"))
+            return
+
+    # -----------------------------------------------------------------
+    # 【功能 2】宮廟抽籤與擲筊
+    # -----------------------------------------------------------------
+    if user_msg == "抽籤":
+        dice = random.choice(["聖筊", "笑筊", "陰筊"])
+        if dice != "聖筊":
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"☯️ 您向神明求籤，但擲出【{dice}】。神明目前未應允，請調整心情再試一次。"))
+            return
+        
+        # 聖筊則賜籤 (六十甲子籤簡易範例)
+        fortunes = [
+            "第一籤【大吉】甲子：日出東方照大地，萬事亨通福祿臨。求財得財，病體安康。",
+            "第十籤【下下】癸酉：病中若得苦心勞，到底完全總未遭。多行善事，以求改運。",
+            "第二四籤【中平】丁亥：月出光輝本清吉，浮雲總是蔽其明。耐守時運，自得安泰。",
+            "第三六籤【上籤】己亥：福如東海壽如山，君爾何須嘆苦艱。命內自然逢大吉，茅屋亦可變成官。"
         ]
+        chosen_fortune = random.choice(fortunes)
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"☯️ 擲出【聖筊】！神明賜籤如下：\n\n{chosen_fortune}"))
+        return
+
+    # -----------------------------------------------------------------
+    # 【功能 3】真·隨機塔羅牌
+    # -----------------------------------------------------------------
+    if user_msg == "抽牌" or user_msg == "塔羅牌":
+        tarot_cards = ["愚者", "魔術師", "女祭司", "女皇", "皇帝", "教皇", "戀人", "戰車", "力量", "死神", "太陽", "世界"]
         chosen_card = random.choice(tarot_cards)
         position = random.choice(["正位", "逆位"])
         
         try:
             response = gemini_client.models.generate_content(
                 model='gemini-2.5-flash',
-                contents=f"我剛剛抽到了塔羅牌的【{chosen_card}（{position}）】。請針對這張特定的牌，為我目前的現況、或是提問給予詳細且有智慧的解牌占卜。",
+                contents=f"我抽到了塔羅牌的【{chosen_card}（{position}）】。請針對這張牌，為我目前的現況給予客觀、直接、簡潔的命理分析。",
                 config=types.GenerateContentConfig(
-                    system_instruction="你是一位精通塔羅牌與神秘學的專業占卜師。請根據使用者提供的『特定卡牌與正逆位』，用溫慢、充滿啟發性的繁體中文為其進行專業的解牌。"
+                    system_instruction="你是一位客觀、專業、講話直接效率的命理大師。請根據特定卡牌，提供直白不煽情的解牌分析。"
                 )
             )
             reply_text = response.text
-        except Exception as e:
-            reply_text = "哎呀，我的水晶球現在有點模糊，請稍後再試試看。"
+        except Exception:
+            reply_text = "系統忙碌中，請稍後重試。"
             
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
         return
 
-    # 2. 如果不是要抽牌，不論使用者打「您好」、「嗨」還是聊任何天，都一律交給 Gemini AI 聊天解惑！
+    # -----------------------------------------------------------------
+    # 【功能 4】待辦清單 (格式：待辦 買牛奶 / 查詢待辦)
+    # -----------------------------------------------------------------
+    if user_msg.startswith("待辦"):
+        todo_item = user_msg.replace("待辦", "").strip()
+        if user_id not in TODO_LIST:
+            TODO_LIST[user_id] = []
+        TODO_LIST[user_id].append(todo_item)
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"🗒️ 已為您記錄待辦事項：{todo_item}"))
+        return
+        
+    if user_msg == "查詢待辦":
+        user_todos = TODO_LIST.get(user_id, [])
+        if not user_todos:
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="🗒️ 目前沒有待辦事項。"))
+        else:
+            list_text = "\n".join([f"{i+1}. {task}" for i, task in enumerate(user_todos)])
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"🗒️ 您的待辦清單：\n{list_text}"))
+        return
+
+    # -----------------------------------------------------------------
+    # 【功能 5】簡易記帳功能 (格式：記帳 午餐 120 / 查詢記帳)
+    # -----------------------------------------------------------------
+    if user_msg.startswith("記帳"):
+        try:
+            parts = user_msg.split()
+            item = parts[1]
+            amount = int(parts[2])
+            if user_id not in EXPENSES:
+                EXPENSES[user_id] = []
+            EXPENSES[user_id].append({"item": item, "amount": amount})
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"💰 已記錄消費：{item} 共 {amount} 元。"))
+            return
+        except Exception:
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="❌ 記帳失敗。請使用格式：記帳 午餐 120"))
+            return
+
+    if user_msg == "查詢記帳":
+        user_expenses = EXPENSES.get(user_id, [])
+        if not user_expenses:
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="💰 目前沒有記帳紀錄。"))
+        else:
+            total = sum(e["amount"] for e in user_expenses)
+            list_text = "\n".join([f"· {e['item']}: ${e['amount']}" for e in user_expenses])
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"💰 歷史消費紀錄：\n{list_text}\n----\n總計：${total} 元"))
+        return
+
+    # -----------------------------------------------------------------
+    # 【功能 6】其餘對話一律交給 Gemini AI (正常效率對話)
+    # -----------------------------------------------------------------
     try:
         response = gemini_client.models.generate_content(
             model='gemini-2.5-flash',
             contents=user_msg,
             config=types.GenerateContentConfig(
-                system_instruction="你是一位精通塔羅牌與神秘學的專業占卜師，同時也是使用者的『智慧雙重身分助理』，說話語氣溫暖、神秘、幽默且富有智慧。不論使用者跟你聊什麼，你都要用溫暖的繁體中文熱情、聰明地回應他們，引導他們傾訴，有需要時也可以主動提議幫他們抽牌占卜。"
+                system_instruction="你是一位專業、有效率的日常生活助手。請用繁體中文回答使用者的問題，不帶多餘的溫柔情感，直接切入核心回答。"
             )
         )
         reply_text = response.text
-    except Exception as e:
-        print(f"Gemini 發生錯誤: {e}")
-        reply_text = "我好像恍神了一下，可以請你再對我說一次嗎？"
+    except Exception:
+        reply_text = "暫時無法提供回覆。"
 
     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
