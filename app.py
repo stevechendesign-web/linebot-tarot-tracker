@@ -14,18 +14,21 @@ from google.genai import types
 app = Flask(__name__)
 
 # -----------------------------------------------------------------
-# 🔐 設定 Google 試算表雲端連線權限 (安全隔離新寫法)
+# 🔐 設定 Google 試算表雲端連線權限 (安全環境變數新寫法)
 # -----------------------------------------------------------------
 import json
 
-# 🔒 資安防護罩：如果是在 Render 雲端環境，自動從環境變數把 Google 金鑰還原成臨時檔案
-if os.environ.get("GOOGLE_KEY_JSON_CONTENT"):
-    with open("google_key.json", "w", encoding="utf-8") as f:
-        f.write(os.environ.get("GOOGLE_KEY_JSON_CONTENT"))
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
-scope = ["https://google.com", "https://googleapis.com"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("google_key.json", scope)
-sheets_client = gspread.authorize(creds)
+# 🔒 不讀取實體檔案，直接把你在 Render 填寫的 JSON 密碼字串轉成 Python 字典
+google_key_content = os.environ.get("GOOGLE_KEY_JSON_CONTENT")
+if google_key_content:
+    creds_dict = json.loads(google_key_content)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope) [cite: 1.2.2, 1.2.3]
+    sheets_client = gspread.authorize(creds)
+else:
+    print("⚠️ 錯誤：Render 後台未設定 GOOGLE_KEY_JSON_CONTENT 環境變數！")
+
 
 
 # 📂 自動打開你的 Google 雲端試算表
