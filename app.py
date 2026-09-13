@@ -24,7 +24,7 @@ scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/au
 google_key_content = os.environ.get("GOOGLE_KEY_JSON_CONTENT")
 if google_key_content:
     creds_dict = json.loads(google_key_content)
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope) [cite: 1.2.2, 1.2.3]
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     sheets_client = gspread.authorize(creds)
 else:
     print("⚠️ 錯誤：Render 後台未設定 GOOGLE_KEY_JSON_CONTENT 環境變數！")
