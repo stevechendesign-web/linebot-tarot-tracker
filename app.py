@@ -202,19 +202,17 @@ def handle_message(event):
             return
 
 
-     # -----------------------------------------------------------------
+         # -----------------------------------------------------------------
     # 【功能 6】其餘對話一律交給 Gemini AI (正常效率對話)
     # -----------------------------------------------------------------
     try:
         response = gemini_client.models.generate_content(
             model='gemini-2.5-flash',
             contents=user_msg,
-            # 🟢 修正這裡：新版 google-genai 必須明確指定物件並給予引導
-            config=types.GenerateContentConfig(
-                system_instruction=types.Part.from_text(
-                    text="你是一位專業、有效率的日常生活助手兼客觀命理分析師。請用繁體中文回答使用者的問題或進行占卜算命，不帶多餘的溫柔情感，直接切入核心回答。"
-                )
-            )
+            # 🟢 修正為標準字典格式，免去引用錯誤，Render 絕對不卡死！
+            config={
+                'system_instruction': "你是一位專業、有效率的日常生活助手兼客觀命理分析師。請用繁體中文回答使用者的問題或進行占卜算命，不帶多餘的溫柔情感，直接切入核心回答。"
+            }
         )
         reply_text = response.text
     except Exception:
