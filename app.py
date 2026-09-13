@@ -13,10 +13,20 @@ from google.genai import types
 
 app = Flask(__name__)
 
-# 🔐 設定 Google 試算表雲端連線權限
+# -----------------------------------------------------------------
+# 🔐 設定 Google 試算表雲端連線權限 (安全隔離新寫法)
+# -----------------------------------------------------------------
+import json
+
+# 🔒 資安防護罩：如果是在 Render 雲端環境，自動從環境變數把 Google 金鑰還原成臨時檔案
+if os.environ.get("GOOGLE_KEY_JSON_CONTENT"):
+    with open("google_key.json", "w", encoding="utf-8") as f:
+        f.write(os.environ.get("GOOGLE_KEY_JSON_CONTENT"))
+
 scope = ["https://google.com", "https://googleapis.com"]
 creds = ServiceAccountCredentials.from_json_keyfile_name("google_key.json", scope)
 sheets_client = gspread.authorize(creds)
+
 
 # 📂 自動打開你的 Google 雲端試算表
 try:
