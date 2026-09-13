@@ -1,6 +1,9 @@
 import os
 import random
 import threading
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from datetime import datetime
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
@@ -9,6 +12,19 @@ from google import genai
 from google.genai import types
 
 app = Flask(__name__)
+
+# 🔐 設定 Google 試算表雲端連線權限
+scope = ["https://google.com", "https://googleapis.com"]
+creds = ServiceAccountCredentials.from_json_keyfile_name("google_key.json", scope)
+sheets_client = gspread.authorize(creds)
+
+# 📂 自動打開你的 Google 雲端試算表
+try:
+    spreadsheet = sheets_client.open("LINE助理資料庫")
+    expense_sheet = spreadsheet.worksheet("記帳")
+    todo_sheet = spreadsheet.worksheet("待辦")
+except Exception as e:
+    print(f"Google 試算表連線失敗: {e}")
 
 # LINE 憑證與 Gemini 客戶端初始化
 line_bot_api = LineBotApi(os.environ.get('LINE_CHANNEL_ACCESS_TOKEN'))
@@ -102,62 +118,102 @@ def handle_message(event):
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
         return
 
-    # -----------------------------------------------------------------
-    # 【功能 4】待辦清單 (格式：待辦 買牛奶 / 查詢待辦)
+        # -----------------------------------------------------------------
+    # 【功能 4】雲端同步版：待辦清單 (格式：待辦 22:00 倒垃圾 / 查詢待辦)
     # -----------------------------------------------------------------
     if user_msg.startswith("待辦"):
-        todo_item = user_msg.replace("待辦", "").strip()
-        if user_id not in TODO_LIST:
-            TODO_LIST[user_id] = []
-        TODO_LIST[user_id].append(todo_item)
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"🗒️ 已為您記錄待辦事項：{todo_item}"))
-        return
-        
+        try:
+            content = user_msg.replace("待辦", "").strip()
+            parts = content.split(maxsplit=1)
+            
+            if len(parts) == 2:
+                todo_time = parts[0]     # 擷取時間，例如：22:00
+                todo_task = parts[1]     # 擷取任務，例如：倒垃圾
+            else:
+                todo_time = "未設定"
+                todo_task = content
+                
+            today_date = datetime.now().strftime("%Y-%m-%d")
+            
+            # 🚀 同步寫入 Google 試算表「待辦」分頁
+            todo_sheet.append_row([today_date, todo_time, todo_task])
+            
+            line_bot_api.reply_message(
+                event.reply_token, 
+                TextSendMessage(text=f"🗒️ [雲端同步] 已記錄待辦事項：\n時間：{todo_time}\n任務：{todo_task}")
+            )
+            return
+        except Exception as e:
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="❌ 雲端待辦儲存失敗。"))
+            return
+            
     if user_msg == "查詢待辦":
-        user_todos = TODO_LIST.get(user_id, [])
-        if not user_todos:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="🗒️ 目前沒有待辦事項。"))
-        else:
-            list_text = "\n".join([f"{i+1}. {task}" for i, task in enumerate(user_todos)])
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"🗒️ 您的待辦清單：\n{list_text}"))
-        return
+        try:
+            all_records = todo_sheet.get_all_values()
+            if len(all_records) <= 1:
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="🗒️ 目前雲端沒有待辦事項。"))
+            else:
+                list_items = []
+                for i, row in enumerate(all_records[1:]):
+                    list_items.append(f"{i+1}. [{row[1]}] {row[2]}")
+                list_text = "\n".join(list_items)
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"🗒️ 您的雲端待辦清單：\n{list_text}"))
+            return
+        except Exception:
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="❌ 無法讀取雲端待辦清單。"))
+            return
 
-    # -----------------------------------------------------------------
-    # 【功能 5】簡易記帳功能 (格式：記帳 午餐 120 / 查詢記帳)
+
+        # -----------------------------------------------------------------
+    # 【功能 5】雲端同步版：記帳功能 (格式：記帳 午餐 120 / 查詢記帳)
     # -----------------------------------------------------------------
     if user_msg.startswith("記帳"):
         try:
             parts = user_msg.split()
             item = parts[1]
             amount = int(parts[2])
-            if user_id not in EXPENSES:
-                EXPENSES[user_id] = []
-            EXPENSES[user_id].append({"item": item, "amount": amount})
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"💰 已記錄消費：{item} 共 {amount} 元。"))
+            today_date = datetime.now().strftime("%Y-%m-%d")
+            
+            # 🚀 同步寫入 Google 試算表「記帳」分頁
+            expense_sheet.append_row([today_date, item, amount])
+            
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"💰 [雲端同步] 已記錄消費：{item} 共 {amount} 元。"))
             return
         except Exception:
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text="❌ 記帳失敗。請使用格式：記帳 午餐 120"))
             return
 
     if user_msg == "查詢記帳":
-        user_expenses = EXPENSES.get(user_id, [])
-        if not user_expenses:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="💰 目前沒有記帳紀錄。"))
-        else:
-            total = sum(e["amount"] for e in user_expenses)
-            list_text = "\n".join([f"· {e['item']}: ${e['amount']}" for e in user_expenses])
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"💰 歷史消費紀錄：\n{list_text}\n----\n總計：${total} 元"))
-        return
+        try:
+            all_records = expense_sheet.get_all_values()
+            if len(all_records) <= 1:
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="💰 目前雲端沒有記帳紀錄。"))
+            else:
+                total = 0
+                list_items = []
+                for row in all_records[1:]:
+                    total += int(row[2])
+                    list_items.append(f"· {row[1]}: ${row[2]}")
+                list_text = "\n".join(list_items)
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"💰 雲端消費紀錄：\n{list_text}\n----\n總計：${total} 元"))
+            return
+        except Exception:
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="❌ 無法讀取雲端記帳紀錄。"))
+            return
 
-    # -----------------------------------------------------------------
+
+     # -----------------------------------------------------------------
     # 【功能 6】其餘對話一律交給 Gemini AI (正常效率對話)
     # -----------------------------------------------------------------
     try:
         response = gemini_client.models.generate_content(
             model='gemini-2.5-flash',
             contents=user_msg,
+            # 🟢 修正這裡：新版 google-genai 必須明確指定物件並給予引導
             config=types.GenerateContentConfig(
-                system_instruction="你是一位專業、有效率的日常生活助手兼客觀命理分析師。請用繁體中文回答使用者的問題或進行占卜算命，不帶多餘的溫柔情感，直接切入核心回答。"
+                system_instruction=types.Part.from_text(
+                    text="你是一位專業、有效率的日常生活助手兼客觀命理分析師。請用繁體中文回答使用者的問題或進行占卜算命，不帶多餘的溫柔情感，直接切入核心回答。"
+                )
             )
         )
         reply_text = response.text
@@ -166,5 +222,3 @@ def handle_message(event):
 
     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
