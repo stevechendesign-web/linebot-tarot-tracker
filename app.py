@@ -59,8 +59,8 @@ spreadsheet = None
 # 📂 自動打開你的 Google 雲端試算表
 try:
 #    spreadsheet = sheets_client.open("LINE助理資料庫")
-    expense_sheet = spreadsheet.worksheet("記帳")
-    todo_sheet = spreadsheet.worksheet("待辦")
+#    expense_sheet = spreadsheet.worksheet("記帳")
+#    todo_sheet = spreadsheet.worksheet("待辦")
 except Exception as e:
     print(f"Google 試算表連線失敗: {e}")
 
