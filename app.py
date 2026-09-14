@@ -14,20 +14,28 @@ from google.genai import types
 app = Flask(__name__)
 
 # -----------------------------------------------------------------
-# 🔐 設定 Google 試算表雲端連線權限 (安全環境變數新寫法)
+# 🔐 設定 Google 試算表雲端連線權限 (無檔案、單行變數組裝法)
 # -----------------------------------------------------------------
-import json
+scope = ["https://google.com", "https://googleapis.com"]
 
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+# 🔒 完美的記憶體組裝：不讀取實體 json 檔案，改由 Render 環境變數直接拼湊出 Google 憑證字典
+info = {
+    "type": "service_account",
+    "project_id": os.environ.get("GOOGLE_PROJECT_ID"),
+    "private_key_id": os.environ.get("GOOGLE_PRIVATE_KEY_ID"),
+    "private_key": os.environ.get("GOOGLE_PRIVATE_KEY").replace("\\n", "\n") if os.environ.get("GOOGLE_PRIVATE_KEY") else None,
+    "client_email": os.environ.get("GOOGLE_CLIENT_EMAIL"),
+    "client_id": os.environ.get("GOOGLE_CLIENT_ID"),
+    "auth_uri": "https://google.com",
+    "token_uri": "https://googleapis.com",
+    "auth_provider_x509_cert_url": "https://googleapis.com",
+    "client_x509_cert_url": os.environ.get("GOOGLE_CLIENT_X509_CERT_URL")
+}
 
-# 🔒 不讀取實體檔案，直接把你在 Render 填寫的 JSON 密碼字串轉成 Python 字典
-google_key_content = os.environ.get("GOOGLE_KEY_JSON_CONTENT")
-if google_key_content:
-    creds_dict = json.loads(google_key_content)
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-    sheets_client = gspread.authorize(creds)
-else:
-    print("⚠️ 錯誤：Render 後台未設定 GOOGLE_KEY_JSON_CONTENT 環境變數！")
+# 將憑證字典直接餵給授權引擎
+creds = ServiceAccountCredentials.from_json_keyfile_dict(info, scope)
+sheets_client = gspread.authorize(creds)
+
 
 
 
