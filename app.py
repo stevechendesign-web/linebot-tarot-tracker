@@ -14,27 +14,36 @@ from google.genai import types
 app = Flask(__name__)
 
 # -----------------------------------------------------------------
-# 🔐 設定 Google 試算表雲端連線權限 (100% 免檔案、直接讀取 JSON 內容)
+# 🔐 設定 Google 試算表雲端連線權限 (單行 Private Key 直接對接寫法)
 # -----------------------------------------------------------------
-import json
-
 scope = ["https://google.com", "https://googleapis.com"]
 
-# 🔒 讀取你後台唯一的這一欄：GOOGLE_KEY_JSON_CONTENT
-google_key_content = os.environ.get("GOOGLE_KEY_JSON_CONTENT")
+# 🔒 完美的記憶體組裝：不讀取 json 檔案，改由 Render 環境變數直接拼湊出 Google 憑證字典
+google_private_key = os.environ.get("GOOGLE_KEY_JSON_CONTENT")
 
-if google_key_content:
-    # 🟢 關鍵：直接用 json.loads 把你後台填的那大串內容轉成字典
-    info = json.loads(google_key_content)
-    
+if google_private_key:
     # 修正私鑰中可能因為網頁傳輸被破壞的換行符號
-    if "private_key" in info and info["private_key"]:
-        info["private_key"] = info["private_key"].replace("\\n", "\n")
+    if "\\n" in google_private_key:
+        google_private_key = google_private_key.replace("\\n", "\n")
         
+    info = {
+        "type": "service_account",
+        "project_id": os.environ.get("GOOGLE_PROJECT_ID", "你的專案ID"),
+        "private_key_id": os.environ.get("GOOGLE_PRIVATE_KEY_ID", "你的私鑰ID"),
+        "private_key": google_private_key,
+        "client_email": os.environ.get("GOOGLE_CLIENT_EMAIL", "你的服務帳號Email"),
+        "client_id": os.environ.get("GOOGLE_CLIENT_ID", "你的客戶端ID"),
+        "auth_uri": "https://google.com",
+        "token_uri": "https://googleapis.com",
+        "auth_provider_x509_cert_url": "https://googleapis.com",
+        "client_x509_cert_url": os.environ.get("GOOGLE_CLIENT_X509_CERT_URL", "你的證書網址")
+    }
+    
     creds = ServiceAccountCredentials.from_json_keyfile_dict(info, scope)
     sheets_client = gspread.authorize(creds)
 else:
     print("⚠️ 錯誤：Render 後台未偵測到 GOOGLE_KEY_JSON_CONTENT 環境變數！")
+
 
 
 # 📂 自動打開你的 Google 雲端試算表
