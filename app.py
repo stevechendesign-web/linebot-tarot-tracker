@@ -58,6 +58,7 @@ spreadsheet = None
 
 # 📂 自動打開你的 Google 雲端試算表
 try:
+    pass  # 🟢 狠狠地在 try 下方補上這一行（前面要留 4 個空格縮排）！
 #    spreadsheet = sheets_client.open("LINE助理資料庫")
 #    expense_sheet = spreadsheet.worksheet("記帳")
 #    todo_sheet = spreadsheet.worksheet("待辦")
