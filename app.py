@@ -14,23 +14,30 @@ from google.genai import types
 app = Flask(__name__)
 
 # -----------------------------------------------------------------
-# 🔐 設定 Google 試算表雲端連線權限 (單行 Private Key 直接對接寫法)
+# 🔐 設定 Google 試算表雲端連線權限 (終極自動換行與外殼修復寫法)
 # -----------------------------------------------------------------
 scope = ["https://google.com", "https://googleapis.com"]
 
-# 🔒 完美的記憶體組裝：不讀取 json 檔案，改由 Render 環境變數直接拼湊出 Google 憑證字典
-google_private_key = os.environ.get("GOOGLE_KEY_JSON_CONTENT")
+raw_key = os.environ.get("GOOGLE_KEY_JSON_CONTENT")
 
-if google_private_key:
-    # 修正私鑰中可能因為網頁傳輸被破壞的換行符號
-    if "\\n" in google_private_key:
-        google_private_key = google_private_key.replace("\\n", "\n")
+if raw_key:
+    # 🧼 第一步：把不小心複製到的空白、引號、換行符號全部剔除乾淨
+    clean_key = raw_key.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
+    clean_key = clean_key.replace("\n", "").replace("\r", "").replace(" ", "").strip()
+    
+    # 📐 第二步：核心破關！每 64 個字元強迫換行一次，完全對齊 Base64 標準規格
+    formatted_key = ""
+    for i in range(0, len(clean_key), 64):
+        formatted_key += clean_key[i:i+64] + "\n"
         
+    # 🛡️ 第三步：自動穿上 Google 官方規定的標準 PEM 安全防護外殼
+    final_private_key = f"-----BEGIN PRIVATE KEY-----\n{formatted_key}-----END PRIVATE KEY-----\n"
+    
     info = {
         "type": "service_account",
         "project_id": os.environ.get("GOOGLE_PROJECT_ID", "你的專案ID"),
         "private_key_id": os.environ.get("GOOGLE_PRIVATE_KEY_ID", "你的私鑰ID"),
-        "private_key": google_private_key,
+        "private_key": final_private_key,
         "client_email": os.environ.get("GOOGLE_CLIENT_EMAIL", "你的服務帳號Email"),
         "client_id": os.environ.get("GOOGLE_CLIENT_ID", "你的客戶端ID"),
         "auth_uri": "https://google.com",
@@ -43,7 +50,6 @@ if google_private_key:
     sheets_client = gspread.authorize(creds)
 else:
     print("⚠️ 錯誤：Render 後台未偵測到 GOOGLE_KEY_JSON_CONTENT 環境變數！")
-
 
 
 # 📂 自動打開你的 Google 雲端試算表
