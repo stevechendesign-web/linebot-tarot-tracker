@@ -63,6 +63,9 @@ try:
 #    todo_sheet = spreadsheet.worksheet("待辦")
 except Exception as e:
     print(f"Google 試算表連線失敗: {e}")
+worksheet = None
+
+
 
 # LINE 憑證與 Gemini 客戶端初始化
 line_bot_api = LineBotApi(os.environ.get('LINE_CHANNEL_ACCESS_TOKEN'))
