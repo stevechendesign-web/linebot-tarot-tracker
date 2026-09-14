@@ -50,11 +50,13 @@ app = Flask(__name__)
 #    sheets_client = gspread.authorize(creds)
 #else:
 #    print("⚠️ 錯誤：Render 後台未偵測到 GOOGLE_KEY_JSON_CONTENT 環境變數！")
+# 🟢 臨時救火線：給系統一個空的 sheets_client，防止下方程式找不到變數而閃退當機！
+sheets_client = None
 
 
 # 📂 自動打開你的 Google 雲端試算表
 try:
-    spreadsheet = sheets_client.open("LINE助理資料庫")
+#    spreadsheet = sheets_client.open("LINE助理資料庫")
     expense_sheet = spreadsheet.worksheet("記帳")
     todo_sheet = spreadsheet.worksheet("待辦")
 except Exception as e:
