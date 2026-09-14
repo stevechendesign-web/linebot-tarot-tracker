@@ -58,7 +58,9 @@ def callback():
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     user_msg = event.message.text.strip()
-    
+# 🟢 偵測雷達：只要手機有傳訊息進來，就在 Render 黑色日誌裡強行刷出這行字！
+print(f"📡 【抓鬼雷達】手機傳進來的文字是： {user_msg}")
+
     # 【功能 1】主選單選單
     if user_msg == "功能" or user_msg.lower() == "menu":
         reply_text = (
