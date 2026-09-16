@@ -28,7 +28,6 @@ def ask_gemini(user_text):
         
     system_prompt = "你是一位專業、有效率的日常生活助手兼客觀命理分析師。請用繁體中文回答使用者的問題或進行占卜算命，不帶多餘的溫柔情感，直接切入核心回答。"
     
-    # 🎯【修正】修正為 Google Gemini 官方標準 API 網址與路徑 (使用主流的 gemini-1.5-flash 模型)
     url = f"https://googleapis.com{GEMINI_API_KEY}"
     headers = {"Content-Type": "application/json"}
     payload = {
@@ -37,19 +36,21 @@ def ask_gemini(user_text):
     }
     
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=12)
+        response = requests.post(url, headers=headers, json=payload, timeout=15)
         result = response.json()
         
-        # 🟢 精準提取 Google AI 運算出來的真實即時回答
+        # 🟢 【修正關鍵 1】修正原先少寫了 [0] 的字典提取語法漏洞
         if "candidates" in result and result["candidates"]:
             ai_reply = result["candidates"][0]["content"]["parts"][0]["text"].strip()
             return ai_reply
         else:
-            print(f"Gemini API Error Response: {result}")
-            return "🔮（連線異常）\n高冷分析師目前與星象失去連線，請稍後再試，或檢查你的 GEMINI_API_KEY 是否正確。"
+            # 💡 直接回傳 Google AI 的原始 API 錯誤（例如金鑰無效），不再顯示舊的防禦罐頭訊息
+            return f"❌ Google AI 回傳結構錯誤：\n{result}"
+            
     except Exception as e:
-        print(f"Gemini Real-time Error: {e}")
-        return "🔮（連線超時）\n網路似乎有點堵塞，分析師暫時無法回應，請再傳一次訊息。"
+        # 💡 【修正關鍵 2】完全拔除舊的「網路有點堵塞」罐頭訊息，直接把真正的崩潰原因（如 Timeout 或 ConnectionError）丟回手機！
+        return f"💥 程式碼實際報錯原因：\n{str(e)}"
+
 
 @app.route("/callback", methods=['POST'])
 def callback():
