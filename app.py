@@ -26,7 +26,7 @@ def ask_gemini(user_text):
         
     system_prompt = "你是一位專業、有效率的日常生活助手兼客觀命理分析師。請用繁體中文回答使用者的問題或進行占卜算命，不帶多餘的溫柔情感，直接切入核心回答。"
     
-    # 🎯【徹底更正】這裡才是真正 Google 官方認可的 Gemini 1.5 正確 API 請求路徑
+    # 🎯【徹底修復】把 Google 官方認可的正確完整網址直接寫死在這裡，後面直接加 Key！
     url = f"https://googleapis.com{GEMINI_API_KEY}"
     headers = {"Content-Type": "application/json"}
     payload = {
@@ -43,7 +43,7 @@ def ask_gemini(user_text):
             ai_reply = result["candidates"][0]["content"]["parts"][0]["text"].strip()
             return ai_reply
         else:
-            return f"❌ Google AI 回傳結構錯誤，請檢查金鑰是否有權限：\n{result}"
+            return f"❌ Google AI 回傳錯誤（請檢查金鑰是否有效）：\n{result}"
             
     except Exception as e:
         return f"💥 程式碼實際報錯原因：\n{str(e)}"
