@@ -16,8 +16,6 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").replace('"', '').replace("
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-# 🌐 【新增】UptimeRobot 防休眠專用路徑
-# 讓 UptimeRobot 戳 https://onrender.com 時，能回傳 200 保持清醒
 @app.route("/", methods=['GET'])
 def home():
     return "LINE 小幫手伺服器運行中，防休眠機制正常！", 200
@@ -28,6 +26,7 @@ def ask_gemini(user_text):
         
     system_prompt = "你是一位專業、有效率的日常生活助手兼客觀命理分析師。請用繁體中文回答使用者的問題或進行占卜算命，不帶多餘的溫柔情感，直接切入核心回答。"
     
+    # 🎯【徹底更正】這裡才是真正 Google 官方認可的 Gemini 1.5 正確 API 請求路徑
     url = f"https://googleapis.com{GEMINI_API_KEY}"
     headers = {"Content-Type": "application/json"}
     payload = {
@@ -39,18 +38,15 @@ def ask_gemini(user_text):
         response = requests.post(url, headers=headers, json=payload, timeout=15)
         result = response.json()
         
-        # 🟢 【修正關鍵 1】修正原先少寫了 [0] 的字典提取語法漏洞
+        # 🟢 精準提取資料
         if "candidates" in result and result["candidates"]:
             ai_reply = result["candidates"][0]["content"]["parts"][0]["text"].strip()
             return ai_reply
         else:
-            # 💡 直接回傳 Google AI 的原始 API 錯誤（例如金鑰無效），不再顯示舊的防禦罐頭訊息
-            return f"❌ Google AI 回傳結構錯誤：\n{result}"
+            return f"❌ Google AI 回傳結構錯誤，請檢查金鑰是否有權限：\n{result}"
             
     except Exception as e:
-        # 💡 【修正關鍵 2】完全拔除舊的「網路有點堵塞」罐頭訊息，直接把真正的崩潰原因（如 Timeout 或 ConnectionError）丟回手機！
         return f"💥 程式碼實際報錯原因：\n{str(e)}"
-
 
 @app.route("/callback", methods=['POST'])
 def callback():
