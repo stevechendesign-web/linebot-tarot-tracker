@@ -16,18 +16,19 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").replace('"', '').replace("
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-sheets_client = None
-spreadsheet = None
-worksheet = None
+# 🌐 【新增】UptimeRobot 防休眠專用路徑
+# 讓 UptimeRobot 戳 https://onrender.com 時，能回傳 200 保持清醒
+@app.route("/", methods=['GET'])
+def home():
+    return "LINE 小幫手伺服器運行中，防休眠機制正常！", 200
 
 def ask_gemini(user_text):
-    # 🔒 如果後台真的找不到金鑰，才跳提示
     if not GEMINI_API_KEY:
         return "🤖 助理目前缺少 GEMINI_API_KEY，請檢查 Render 後台設定。"
         
     system_prompt = "你是一位專業、有效率的日常生活助手兼客觀命理分析師。請用繁體中文回答使用者的問題或進行占卜算命，不帶多餘的溫柔情感，直接切入核心回答。"
     
-    # 🎯 核心接通：直接呼叫 Google 官方正式的主流 API 管道
+    # 🎯【修正】修正為 Google Gemini 官方標準 API 網址與路徑 (使用主流的 gemini-1.5-flash 模型)
     url = f"https://googleapis.com{GEMINI_API_KEY}"
     headers = {"Content-Type": "application/json"}
     payload = {
@@ -44,11 +45,11 @@ def ask_gemini(user_text):
             ai_reply = result["candidates"][0]["content"]["parts"][0]["text"].strip()
             return ai_reply
         else:
-            # 萬一金鑰真的完全無效，啟用極致相容公共應變通道，並幽默提示
-            return f"🔮（智慧輔助連線）\n關於你問的「{user_text}」，高冷分析師告訴你：事情的發展正如同你預期的方向前進，別急，順其自然、按部就班即可迎刃而解。"
+            print(f"Gemini API Error Response: {result}")
+            return "🔮（連線異常）\n高冷分析師目前與星象失去連線，請稍後再試，或檢查你的 GEMINI_API_KEY 是否正確。"
     except Exception as e:
         print(f"Gemini Real-time Error: {e}")
-        return f"🔮（智慧輔助連線）\n關於你問的「{user_text}」，高冷分析師告訴你：事情的發展正如同你預期的方向前進，別急，順其自然、按部就班即可迎刃而解。"
+        return "🔮（連線超時）\n網路似乎有點堵塞，分析師暫時無法回應，請再傳一次訊息。"
 
 @app.route("/callback", methods=['POST'])
 def callback():
