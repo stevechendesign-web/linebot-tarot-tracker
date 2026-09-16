@@ -26,8 +26,10 @@ def ask_gemini(user_text):
         
     system_prompt = "你是一位專業、有效率的日常生活助手兼客觀命理分析師。請用繁體中文回答使用者的問題或進行占卜算命，不帶多餘的溫柔情感，直接切入核心回答。"
     
-    # 🎯【徹底修復】把 Google 官方認可的正確完整網址直接寫死在這裡，後面直接加 Key！
-    url = f"https://googleapis.com{GEMINI_API_KEY}"
+    # 🎯 使用全新的環境變數名稱 GEMINI_CLEAN_KEY，徹底避開舊名稱的黏網址 bug
+    CLEAN_KEY = os.environ.get("GEMINI_CLEAN_KEY", "").strip()
+    url = f"https://googleapis.com{CLEAN_KEY}"
+
     headers = {"Content-Type": "application/json"}
     payload = {
         "contents": [{"parts": [{"text": user_text}]}],
